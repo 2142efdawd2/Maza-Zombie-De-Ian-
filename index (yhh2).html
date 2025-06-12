@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Juego Laberinto 3D Mejorado</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #mensajeFinal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff3366;
+            font-size: 40px;
+            font-family: Arial, sans-serif;
+            display: none;
+            text-align: center;
+            z-index: 10;
+            user-select: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="mensajeFinal">TE AMO Y A TU PUCHAINA 💘</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/examples/js/controls/PointerLockControls.js"></script>
+    <script>
+        let scene, camera, renderer, controls;
+        let walls = [];
+        let zombies = [];
+        let zombieStartPositions = [];
+        let score = 0;
+
+        const keysPressed = {};
+        const velocidadJugador = 0.2;
+        const velocidadZombie = 0.05;
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.PointerLockControls(camera, document.body);
+            document.body.addEventListener('click', () => controls.lock());
+
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(1, 1, 1).normalize();
+            scene.add(light);
+
+            const wallGeometry = new THREE.BoxGeometry(5, 5, 1);
+            const wallMaterial = new THREE.MeshPhongMaterial({ color: 0x888888 });
+
+            function createWall(x, z) {
+                const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+                wall.position.set(x, 2.5, z);
+                scene.add(wall);
+                walls.push(wall);
+            }
+
+            for (let i = -50; i <= 50; i += 5) {
+                createWall(i, -50);
+                createWall(i, 50);
+                createWall(-50, i);
+                createWall(50, i);
+            }
+
+            for (let z = -40; z <= 40; z += 10) {
+                createWall(10, z);
+                createWall(-10, z);
+            }
+
+            for (let x = -40; x <= 40; x += 10) {
+                createWall(x, 10);
+                createWall(x, -10);
+            }
+
+            const zombieGeometry = new THREE.CylinderGeometry(1, 1, 2, 8);
+            const zombieMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+
+            for (let i = 0; i < 5; i++) {
+                const zombie = new THREE.Mesh(zombieGeometry, zombieMaterial);
+                let zx = Math.random() * 80 - 40;
+                let zz = Math.random() * 80 - 40;
+                zombie.position.set(zx, 1, zz);
+                zombieStartPositions.push({ x: zx, z: zz });
+                scene.add(zombie);
+                zombies.push(zombie);
+            }
+
+            const start = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, 4), new THREE.MeshBasicMaterial({ color: 0x0000ff }));
+            start.position.set(0, 0.25, 0);
+            scene.add(start);
+
+            exit = new THREE.Mesh(new THREE.BoxGeometry(4, 0.5, 4), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+            exit.position.set(40, 0.25, 40);
+            scene.add(exit);
+
+            camera.position.set(0, 2, 0);
+
+            window.addEventListener('keydown', (e) => keysPressed[e.key.toLowerCase()] = true);
+            window.addEventListener('keyup', (e) => keysPressed[e.key.toLowerCase()] = false);
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            moverJugador();
+            moverZombies();
+            checkWin();
+
+            renderer.render(scene, camera);
+        }
+
+        function moverJugador() {
+            const direction = new THREE.Vector3();
+
+            if (keysPressed['w']) direction.z -= 1;
+            if (keysPressed['s']) direction.z += 1;
+            if (keysPressed['a']) direction.x -= 1;
+            if (keysPressed['d']) direction.x += 1;
+
+            direction.normalize();
+
+            if (direction.length() > 0) {
+                controls.moveRight(direction.x * velocidadJugador);
+                controls.moveForward(direction.z * velocidadJugador);
+
+                walls.forEach((wall) => {
+                    if (camera.position.distanceTo(wall.position) < 3) {
+                        controls.moveRight(-direction.x * velocidadJugador);
+                        controls.moveForward(-direction.z * velocidadJugador);
+                    }
+                });
+            }
+        }
+
+        function moverZombies() {
+            zombies.forEach((zombie) => {
+                const dirToPlayer = new THREE.Vector3().subVectors(camera.position, zombie.position).normalize();
+                zombie.position.add(dirToPlayer.multiplyScalar(velocidadZombie));
+
+                if (zombie.position.distanceTo(camera.position) < 2) {
+                    alert('¡Te atrapó un zombie! Juego reiniciado.');
+                    reiniciarJuego();
+                }
+            });
+        }
+
+        function checkWin() {
+            if (camera.position.distanceTo(exit.position) < 3) {
+                score += 100;
+                reiniciarJuego();
+
+                if (score >= 500) {
+                    document.getElementById('mensajeFinal').style.display = 'block';
+                }
+            }
+        }
+
+        function reiniciarJuego() {
+            camera.position.set(0, 2, 0);
+            zombies.forEach((zombie, idx) => {
+                zombie.position.set(zombieStartPositions[idx].x, 1, zombieStartPositions[idx].z);
+            });
+        }
+    </script>
+</body>
+</html>
